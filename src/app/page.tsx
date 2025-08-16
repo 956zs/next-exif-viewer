@@ -1,103 +1,323 @@
-import Image from "next/image";
+// src/app/page.tsx
+"use client"; // 因為有互動，需要宣告為客戶端元件
+
+import { useState } from "react";
+import dynamic from "next/dynamic";
+import exifr from "exifr";
+import {
+  UploadCloud,
+  Camera,
+  Aperture,
+  Clock,
+  Gauge,
+  Focus,
+  MapPin,
+  Copyright,
+  Wrench,
+  RotateCw,
+} from "lucide-react";
+
+// 擴充 EXIF 資料的型別，以包含更多資訊
+interface ExifData {
+  Make?: string;
+  Model?: string;
+  LensModel?: string;
+  DateTimeOriginal?: string;
+  FNumber?: number;
+  ExposureTime?: number;
+  ISOSpeedRatings?: number;
+  FocalLength?: number;
+  latitude?: number;
+  longitude?: number;
+  Software?: string;
+  Copyright?: string;
+  Orientation?: string;
+}
+
+const MapDisplay = dynamic(() => import("../components/Map"), {
+  ssr: false,
+});
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [exifData, setExifData] = useState<ExifData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsLoading(true);
+    setError(null);
+    setExifData(null);
+    setImagePreview(URL.createObjectURL(file)); // 使用 Object URL 提高效率
+
+    try {
+      // 啟用 iptc 和 xmp 以獲取更豐富的資訊
+      const data = await exifr.parse(file, { iptc: true, xmp: true });
+      if (!data) {
+        setError("無法解析 EXIF 資訊。");
+        setIsLoading(false);
+        return;
+      }
+
+      const extractedData: ExifData = {
+        Make: data.Make,
+        Model: data.Model,
+        LensModel: data.LensModel,
+        DateTimeOriginal: data.DateTimeOriginal?.toLocaleString(),
+        FNumber: data.FNumber,
+        ExposureTime: data.ExposureTime,
+        ISOSpeedRatings: data.ISOSpeedRatings,
+        FocalLength: data.FocalLength,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        Software: data.Software,
+        Copyright: data.Copyright,
+        Orientation: data.Orientation,
+      };
+
+      setExifData(extractedData);
+    } catch (err) {
+      setError("讀取 EXIF 資訊時發生錯誤。");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 格式化快門速度
+  const formatExposureTime = (time?: number) => {
+    if (!time) return "N/A";
+    if (time < 1) {
+      return `1/${Math.round(1 / time)}`;
+    }
+    return `${time}`;
+  };
+
+  return (
+    <main
+      className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-8"
+      style={{ backgroundColor: "var(--color-background-secondary)" }}
+    >
+      <div
+        className="w-full max-w-4xl mx-auto p-6 rounded-2xl shadow-lg"
+        style={{
+          backgroundColor: "var(--color-background-primary)",
+          borderColor: "var(--color-border)",
+          borderWidth: "1px",
+        }}
+      >
+        <header className="text-center mb-6">
+          <h1
+            className="text-4xl font-bold"
+            style={{ color: "var(--color-primary)" }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+            🌸 EXIF Viewer 🌸
+          </h1>
+          <p className="mt-2" style={{ color: "var(--color-text-secondary)" }}>
+            A base EXIF viewer
+          </p>
+        </header>
+
+        {/* --- 檔案上傳區 --- */}
+        <div
+          className="relative border-2 border-dashed rounded-lg p-10 text-center cursor-pointer hover:border-pink-300 transition-colors"
+          style={{ borderColor: "var(--color-border)" }}
+        >
+          <input
+            type="file"
+            accept="image/jpeg, image/png"
+            onChange={handleFileChange}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+          <div
+            className="flex flex-col items-center"
+            style={{ color: "var(--color-text-placeholder)" }}
+          >
+            <UploadCloud
+              size={48}
+              className="mb-4"
+              style={{ color: "var(--color-accent)" }}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <span className="font-semibold">點擊或拖曳圖片到這裡</span>
+            <p className="text-sm">支援 JPG, PNG 格式</p>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+        {isLoading && (
+          <p
+            className="text-center mt-4"
+            style={{ color: "var(--color-accent)" }}
+          >
+            讀取中...
+          </p>
+        )}
+        {error && <p className="text-center mt-4 text-red-500">{error}</p>}
+
+        {/* --- 結果顯示區 --- */}
+        {imagePreview && (
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* 圖片預覽 */}
+            <div>
+              <h2
+                className="text-2xl font-semibold mb-4"
+                style={{ color: "var(--color-text-primary)" }}
+              >
+                圖片預覽
+              </h2>
+              <img
+                src={imagePreview}
+                alt="Preview"
+                className="rounded-lg shadow-md w-full max-h-[400px] object-contain"
+              />
+            </div>
+
+            {/* EXIF 資訊 */}
+            <div>
+              <h2
+                className="text-2xl font-semibold mb-4"
+                style={{ color: "var(--color-text-primary)" }}
+              >
+                EXIF 資訊
+              </h2>
+              <div
+                className="space-y-3 p-4 rounded-lg"
+                style={{
+                  backgroundColor: "var(--color-background-secondary)",
+                  border: "1px solid var(--color-border)",
+                }}
+              >
+                <ExifInfoItem
+                  icon={<Camera size={20} />}
+                  label="相機型號"
+                  value={`${exifData?.Make || ""} ${exifData?.Model || "N/A"}`}
+                />
+                <ExifInfoItem
+                  icon={<Aperture size={20} />}
+                  label="光圈"
+                  value={exifData?.FNumber ? `f/${exifData.FNumber}` : "N/A"}
+                />
+                <ExifInfoItem
+                  icon={<Clock size={20} />}
+                  label="快門"
+                  value={`${formatExposureTime(exifData?.ExposureTime)} s`}
+                />
+                <ExifInfoItem
+                  icon={<Gauge size={20} />}
+                  label="ISO"
+                  value={exifData?.ISOSpeedRatings || "N/A"}
+                />
+                <ExifInfoItem
+                  icon={<i className="w-5 h-5 text-center font-mono">ƒ</i>}
+                  label="焦距"
+                  value={
+                    exifData?.FocalLength ? `${exifData.FocalLength} mm` : "N/A"
+                  }
+                />
+                <ExifInfoItem
+                  icon={<i className="w-5 h-5 text-center font-mono">📅</i>}
+                  label="拍攝時間"
+                  value={exifData?.DateTimeOriginal || "N/A"}
+                />
+                <ExifInfoItem
+                  icon={<Focus size={20} />}
+                  label="鏡頭型號"
+                  value={exifData?.LensModel || "N/A"}
+                />
+                {exifData?.latitude && exifData?.longitude && (
+                  <ExifInfoItem
+                    icon={<MapPin size={20} />}
+                    label="GPS"
+                    value={`${exifData.latitude.toFixed(
+                      4
+                    )}, ${exifData.longitude.toFixed(4)}`}
+                  />
+                )}
+                <ExifInfoItem
+                  icon={<Wrench size={20} />}
+                  label="處理軟體"
+                  value={exifData?.Software || "N/A"}
+                />
+                <ExifInfoItem
+                  icon={<Copyright size={20} />}
+                  label="版權資訊"
+                  value={exifData?.Copyright || "N/A"}
+                />
+                <ExifInfoItem
+                  icon={<RotateCw size={20} />}
+                  label="照片方向"
+                  value={exifData?.Orientation || "N/A"}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {exifData?.latitude && exifData?.longitude && (
+          <div className="mt-8">
+            <h2
+              className="text-2xl font-semibold mb-4"
+              style={{ color: "var(--color-text-primary)" }}
+            >
+              拍攝地點
+            </h2>
+            <div
+              className="h-96 w-full rounded-lg overflow-hidden shadow-md"
+              style={{
+                border: "1px solid var(--color-border)",
+              }}
+            >
+              <MapDisplay
+                lat={exifData.latitude}
+                lng={exifData.longitude}
+                model={exifData.Model}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+      <footer
+        className="text-center mt-8 text-sm"
+        style={{ color: "var(--color-text-tertiary)" }}
+      >
+        2025 © Nothing happen.
       </footer>
-    </div>
+    </main>
   );
 }
+
+// 為了讓 UI 更整潔，建立一個小元件來顯示每一條 EXIF 資訊
+const ExifInfoItem = ({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+}) => (
+  <div
+    className="flex items-center justify-between p-2 rounded"
+    style={{ backgroundColor: "var(--color-background-primary)" }}
+  >
+    <div className="flex items-center gap-3">
+      <span style={{ color: "var(--color-accent)" }}>{icon}</span>
+      <span
+        className="font-medium"
+        style={{ color: "var(--color-text-secondary)" }}
+      >
+        {label}
+      </span>
+    </div>
+    <span
+      className="font-mono text-right"
+      style={{ color: "var(--color-text-primary)" }}
+    >
+      {value}
+    </span>
+  </div>
+);
